@@ -52,6 +52,14 @@ class FakeTriggerable(object):
             reactor.callLater(0, d.callback, (self.result, self.brids))
         return d
 
+class FakeTriggerDynamic(trigger.Trigger):
+    def getSchedulersAndProperties(self):
+        sp = []
+        for scheduler in self.schedulerNames:
+            for p in ['x', 'y']:
+                sp.append([scheduler, {"testprop": p}])
+        return sp
+
 
 class FakeSourceStamp(object):
 
@@ -160,11 +168,19 @@ class TestTrigger(steps.BuildStepMixin, unittest.TestCase):
 
         return d
 
-    def expectTriggeredWith(self, a=None, b=None):
-        if a:
-            self.exp_a_trigger.append(a)
-        if b:
-            self.exp_b_trigger.append(b)
+    def expectTriggeredWith(self, a=None, b=None, multi=False):
+        if multi:
+            if a:
+                for x in a:
+                    self.exp_a_trigger.append(x)
+            if b:
+                for x in b:
+                    self.exp_b_trigger.append(x)
+        else:
+            if a:
+                self.exp_a_trigger.append(a)
+            if b:
+                self.exp_b_trigger.append(b)
 
     def expectAddedSourceStamp(self, **kwargs):
         self.exp_add_sourcestamp = kwargs
@@ -468,6 +484,19 @@ class TestTrigger(steps.BuildStepMixin, unittest.TestCase):
             self.assertEqual(len(self.flushLoggedErrors(RuntimeError)), 1)
         d.addCallback(flush)
         return d
+
+    def test_dynamicTrigger(self):
+        self.setupStep(FakeTriggerDynamic(schedulerNames=['a', 'b'],
+                                          waitForFinish=True))
+        self.expectOutcome(result=SUCCESS,
+                           status_text=['triggered', 'a', 'a', 'b', 'b'])
+        self.expectTriggeredWith(multi=True,
+                                 a=(({}, dict(testprop=('x', 'Trigger'))),
+                                    ({}, dict(testprop=('y', 'Trigger')))),
+                                 b=(({}, dict(testprop=('x', 'Trigger'))),
+                                    ({}, dict(testprop=('y', 'Trigger')))))
+        self.expectTriggeredLinks('a', 'a', 'b', 'b')
+        return self.runStep(expect_waitForFinish=True)
 
     def test_set_properties(self):
         self.setupStep(trigger.Trigger(schedulerNames=['a'],
