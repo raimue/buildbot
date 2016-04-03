@@ -36,16 +36,15 @@ from twisted.trial import unittest
 class FakeTriggerable(object):
     implements(interfaces.ITriggerableScheduler)
 
-    triggered_with = None
-    result = SUCCESS
-    brids = {}
-    exception = False
-
     def __init__(self, name):
         self.name = name
+        self.triggered_with = []
+        self.result = SUCCESS
+        self.brids = {}
+        self.exception = False
 
     def trigger(self, sourcestamps=None, set_props=None):
-        self.triggered_with = (sourcestamps, set_props.properties)
+        self.triggered_with.append((sourcestamps, set_props.properties))
         d = defer.Deferred()
         if self.exception:
             reactor.callLater(0, d.errback, RuntimeError('oh noes'))
@@ -125,8 +124,8 @@ class TestTrigger(steps.BuildStepMixin, unittest.TestCase):
         self.build.build_status.getAllGotRevisions = getAllGotRevisions
 
         self.exp_add_sourcestamp = None
-        self.exp_a_trigger = None
-        self.exp_b_trigger = None
+        self.exp_a_trigger = []
+        self.exp_b_trigger = []
         self.exp_added_urls = []
 
     def runStep(self, expect_waitForFinish=False):
@@ -162,8 +161,10 @@ class TestTrigger(steps.BuildStepMixin, unittest.TestCase):
         return d
 
     def expectTriggeredWith(self, a=None, b=None):
-        self.exp_a_trigger = a
-        self.exp_b_trigger = b
+        if a:
+            self.exp_a_trigger.append(a)
+        if b:
+            self.exp_b_trigger.append(b)
 
     def expectAddedSourceStamp(self, **kwargs):
         self.exp_add_sourcestamp = kwargs
@@ -179,10 +180,11 @@ class TestTrigger(steps.BuildStepMixin, unittest.TestCase):
             #   which is just addURL('label', 'url')
             return ((label(name, num), url(name, num)), {})
 
-        if 'a' in args:
-            self.exp_added_urls.append(get_args(self.scheduler_a, 'A'))
-        if 'b' in args:
-            self.exp_added_urls.append(get_args(self.scheduler_b, 'B'))
+        for x in args:
+            if x == 'a':
+                self.exp_added_urls.append(get_args(self.scheduler_a, 'A'))
+            if x == 'b':
+                self.exp_added_urls.append(get_args(self.scheduler_b, 'B'))
 
     # tests
     def test_no_schedulerNames(self):
